@@ -1,0 +1,16 @@
+{
+  "name": "screeps",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "serve": "ftp-srv ftp://0.0.0.0:9876 --read-only --root ./build --password pswd"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ftp-srv": "^4.5.0"
+  }
+}
