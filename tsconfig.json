@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "typeRoots": [
+            "./node_modules/@types", 
+            "./@types",
+             "./node_modules/@types/screeps-arena"
+        ],
+        "outDir": "./build/",
+        "rootDir": "src",
+        "target": "esnext"
+    }
+}
