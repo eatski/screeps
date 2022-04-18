@@ -136,7 +136,8 @@ export function loop() {
         if(closestDefender){
             healOrMove({healer,target: closestDefender});
         } else {
-            healer.moveTo(myflg);
+            const closestChaser = healer.findClosestByPath(chaisers);
+            healer.moveTo(closestChaser ? closestChaser : myflg);
         }
     })
     const flg = getObjectsByPrototype(Flag).find(f => !f.my);
