@@ -1,4 +1,4 @@
-import { getObjectsByPrototype } from 'game/utils';
+import { getObjectsByPrototype, getTicks } from 'game/utils';
 import {Creep} from "game/prototypes"
 import { ERR_NOT_IN_RANGE } from 'game/constants';
 import { Flag } from 'arena/prototypes';
@@ -15,8 +15,7 @@ type RoleManager<Obj,Role extends string> = {
 const throwError: (msg: string) => never = (msg) => {throw new Error(msg)};
 
 const roleManager = <Obj,Role extends string>(settings: RoleManagerSettings<Obj,Role>): RoleManager<Obj,Role> => {
-    let record : Record<string,Obj[]> = {
-    };
+    let record : Record<string,Obj[]> = {};
     return {
         get(roleArg: Role): Obj[] {
             const registered = record[roleArg];
@@ -41,7 +40,7 @@ const roleManager = <Obj,Role extends string>(settings: RoleManagerSettings<Obj,
 }
 
 type Role =  "attacker" | "defender" | "chaser" | "defenderHealer" | "attackerHealer" | "chaserHealer"
-let roles : RoleManager<Creep,Role>  = roleManager<Creep,Role>({
+const roles : RoleManager<Creep,Role>  = roleManager<Creep,Role>({
     source: function () {
         return getObjectsByPrototype(Creep).filter(creep => creep.my)
     },
@@ -67,6 +66,35 @@ let roles : RoleManager<Creep,Role>  = roleManager<Creep,Role>({
         throwError("assign failed");
     },
 });
+
+type Focus = {
+    getCurrent(): Creep | null;
+}
+
+const createFocusContainer = (): Focus => {
+    let currentFocus: [Creep ,number] | null = null;
+    return {
+        getCurrent: () => {
+            const currentTick = getTicks();
+            if(!currentFocus || currentTick - currentFocus[1] > 10){
+                const enemies = getObjectsByPrototype(Creep).filter(creep => !creep.my)
+                const myflg = getObjectsByPrototype(Flag).find(f => f.my);
+                if(!myflg) throw new Error("no flag");
+                const closest = myflg.findClosestByPath(enemies)
+                if(closest){
+                    currentFocus = [closest,currentTick]
+                    return closest;
+                } else {
+                    return null
+                }
+            } 
+            return currentFocus[0];
+        },
+    }
+}
+
+const focusContainer = createFocusContainer()
+
 export function loop() {
     const myflg = getObjectsByPrototype(Flag).find(f => f.my);
     if(!myflg) throw new Error("no flag");
@@ -80,7 +108,7 @@ export function loop() {
     const defender = roles.get("defender");
     const chaisers = roles.get("chaser");
     const enemies = getObjectsByPrototype(Creep).filter(creep => !creep.my)
-    const focus = myflg.findClosestByPath(enemies);
+    const focus = focusContainer.getCurrent();
     if(focus) {
         const bindedFocus = focus;
         chaisers.forEach(attacker => {
@@ -89,13 +117,13 @@ export function loop() {
             }
         })
         const damagedChaser = getMostDamaged(chaisers);
-        if(chaisers && damagedChaser){
-            healers.forChaser.forEach(healer => {
-                if(healer.heal(damagedChaser) === ERR_NOT_IN_RANGE){
-                    healer.moveTo(damagedChaser);
-                }
-            })
-        }
+        healers.forChaser.forEach(healer => {
+            if(damagedChaser){
+                healOrMove({healer,target: damagedChaser});
+            } else {
+                healer.moveTo(myflg);
+            }
+        })
     } 
     defender.forEach(def => {
         const closestEnemy = def.findClosestByPath(enemies);
@@ -104,28 +132,48 @@ export function loop() {
         }
     })
     healers.forDefence.forEach(healer => {
-        const closestDefender = healer.findClosestByPath(defender)
-        if(closestDefender && healer.heal(closestDefender) == ERR_NOT_IN_RANGE){
-            healer.moveTo(closestDefender);
+        const closestDefender = healer.findClosestByPath(defender);
+        if(closestDefender){
+            healOrMove({healer,target: closestDefender});
+        } else {
+            healer.moveTo(myflg);
         }
     })
     const flg = getObjectsByPrototype(Flag).find(f => !f.my);
     if(!flg) throw new Error("no flag");
     attackers.forEach(creep => {
-        creep.moveTo(flg);
+        const closestEnemy = creep.findClosestByPath(enemies);
+        if(!closestEnemy || creep.attack(closestEnemy) == ERR_NOT_IN_RANGE){
+            creep.moveTo(flg);
+        }
     })
     const damagedAttacker = getMostDamaged(attackers);
-    if(damagedAttacker){
-        healers.forAttacker.forEach(healer => {
-            if(healer.heal(damagedAttacker) === ERR_NOT_IN_RANGE){
-                healer.moveTo(damagedAttacker);
+    healers.forAttacker.forEach(healer => {
+        if(damagedAttacker){
+            healOrMove({
+                healer: healer,
+                target: damagedAttacker,
+            });
+        } else {
+            const closest = healer.findClosestByPath(attackers);
+            if(closest){
+                healer.moveTo(closest);
+            } else {
+                healer.moveTo(flg);
             }
-        })
+        }
+        
+    })
+}
+
+const healOrMove = ({healer,target}:{healer: Creep,target: Creep}) => {
+    if(healer.heal(target) === ERR_NOT_IN_RANGE && healer.rangedHeal(target) === ERR_NOT_IN_RANGE){
+        healer.moveTo(target);
     }
 }
 
 const getMostDamaged = (creeps: Creep[]): Creep | null => {
-    return creeps.reduce<Creep | null>((acc, creep) => {
+    return creeps.filter(creep => (creep.hitsMax - creep.hits)).reduce<Creep | null>((acc, creep) => {
         if(!acc){
             return creep;
         }
