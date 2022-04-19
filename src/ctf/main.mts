@@ -1,5 +1,5 @@
 import { getObjectsByPrototype, getTicks } from 'game/utils';
-import {Creep} from "game/prototypes"
+import {Creep, RoomPosition} from "game/prototypes"
 import { ERR_NOT_IN_RANGE } from 'game/constants';
 import { Flag } from 'arena/prototypes';
 
@@ -113,7 +113,10 @@ export function loop() {
         const bindedFocus = focus;
         chaisers.forEach(attacker => {
             if(attacker.rangedAttack(bindedFocus) == ERR_NOT_IN_RANGE){
-                attacker.moveTo(bindedFocus);
+                const pathes = bindedFocus.findPathTo(myflg);
+                const halfPathes = pathes.slice(0,Math.floor(pathes.length/2));
+                const halfPoint = halfPathes.reduce<RoomPosition>((acc,path) => ({x: acc.x + path.x,y: acc.y + path.y}),{x: 0,y: 0});
+                attacker.moveTo(halfPoint);
             }
         })
         const damagedChaser = getMostDamaged(chaisers);
