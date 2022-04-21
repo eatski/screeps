@@ -1,5 +1,5 @@
 import { getObjectsByPrototype, getTicks } from 'game/utils';
-import {Creep, RoomPosition} from "game/prototypes"
+import {Creep, StructureTower} from "game/prototypes"
 import { ERR_NOT_IN_RANGE } from 'game/constants';
 import { Flag } from 'arena/prototypes';
 
@@ -97,6 +97,8 @@ const focusContainer = createFocusContainer()
 
 export function loop() {
     const myflg = getObjectsByPrototype(Flag).find(f => f.my);
+    const towers = getObjectsByPrototype(StructureTower).filter(t => t.my);
+    console.log(towers);
     if(!myflg) throw new Error("no flag");
     
     const attackers = roles.get("attacker");
@@ -111,12 +113,11 @@ export function loop() {
     const focus = focusContainer.getCurrent();
     if(focus) {
         const bindedFocus = focus;
+        const pathes = bindedFocus.findPathTo(myflg);
+        const halfPath = pathes[Math.floor(pathes.length / 5)];
         chaisers.forEach(attacker => {
             if(attacker.rangedAttack(bindedFocus) == ERR_NOT_IN_RANGE){
-                const pathes = bindedFocus.findPathTo(myflg);
-                const halfPathes = pathes.slice(0,Math.floor(pathes.length/2));
-                const halfPoint = halfPathes.reduce<RoomPosition>((acc,path) => ({x: acc.x + path.x,y: acc.y + path.y}),{x: 0,y: 0});
-                attacker.moveTo(halfPoint);
+                halfPath && attacker.moveTo(halfPath);
             }
         })
         const damagedChaser = getMostDamaged(chaisers);
@@ -124,10 +125,15 @@ export function loop() {
             if(damagedChaser){
                 healOrMove({healer,target: damagedChaser});
             } else {
-                healer.moveTo(myflg);
+                const closest = healer.findClosestByPath(chaisers);
+                healer.moveTo(closest || myflg);
             }
         })
-    } 
+        towers.forEach(tower => {
+           tower.attack(focus);
+        })
+    }
+    
     defender.forEach(def => {
         const closestEnemy = def.findClosestByPath(enemies);
         if(closestEnemy && def.rangedAttack(closestEnemy) == ERR_NOT_IN_RANGE){
@@ -139,8 +145,7 @@ export function loop() {
         if(closestDefender){
             healOrMove({healer,target: closestDefender});
         } else {
-            const closestChaser = healer.findClosestByPath(chaisers);
-            healer.moveTo(closestChaser ? closestChaser : myflg);
+            healer.moveTo(myflg);
         }
     })
     const flg = getObjectsByPrototype(Flag).find(f => !f.my);
